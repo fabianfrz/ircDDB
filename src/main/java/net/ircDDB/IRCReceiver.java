@@ -23,169 +23,127 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB;
 
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.InputStream;
-import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 
 
-public class IRCReceiver implements Runnable
-{
+public class IRCReceiver implements Runnable {
+    private static final Logger LOGGER = LogManager.getLogger(IRCReceiver.class);
+
+    InputStream is;
+    IRCMessageQueue q;
+
+    IRCReceiver(InputStream inputStream, IRCMessageQueue messageQueue) {
+        is = inputStream;
+        q = messageQueue;
+    }
 
 
-	InputStream is;
-	IRCMessageQueue q;
+    public void run() {
+        IRCMessage m = new IRCMessage();
 
-	IRCReceiver( InputStream inputStream, IRCMessageQueue messageQueue )
-	{
-		is = inputStream;
-		q = messageQueue;
-	}
+        int state = 0;
 
+        byte[] bb = new byte[1000];
 
-	public void run()
-	{
+        while (true) {
+            byte b;
+            int res;
 
-	// DataInputStream d = new DataInputStream(is);
+            try {
+                res = is.read(bb);
 
-	IRCMessage m = new IRCMessage();
+                if (res <= 0) {
+                    LOGGER.info("IRCClient/readByte EOF2");
+                    q.signalEOF();
+                    return;
+                }
 
-	int state = 0;
+            } catch (EOFException e) {
+                LOGGER.info("IRCClient/readByte EOF");
+                q.signalEOF();
+                return;
+            } catch (IOException e) {
+                LOGGER.warn("IRCClient/readByte ", e);
+                q.signalEOF();
+                return;
+            }
 
-	byte[]  bb = new byte[1000];
+            int i;
 
-	while (true)
-	{
-		byte b;
-		int res;
-
-		try
-		{
-			// b = d.readByte();
-			res = is.read(bb);
-
-			if (res <= 0)
-			{
-				Dbg.println(Dbg.INFO, "IRCClient/readByte EOF2");
-				q.signalEOF();
-	                        return;
-			}
-
-			// b = bb[0];
-		}
-		catch (EOFException e)
-		{
-			Dbg.println(Dbg.INFO, "IRCClient/readByte EOF");
-			q.signalEOF();
-			return;
-		}
-		catch (IOException e)
-		{
-			Dbg.println(Dbg.WARN, "IRCClient/readByte " + e);
-			q.signalEOF();
-			return;
-		}
-
-		// Dbg.println(Dbg.INFO, "IRCClient/input " + res);
-
-		int i;
-
-		for (i=0; i < res; i++)
-		{
-		b = bb[i];
+            for (i = 0; i < res; i++) {
+                b = bb[i];
 
 
-		if (b > 0)
-		{
+                if (b > 0) {
 
-		if (b == 10)
-		{
-			q.putMessage(m);
-			m = new IRCMessage();
-			state = 0;
-			// System.out.println("put");
-		}
-		else if (b == 13)
-		{
-			// do nothing
-		}
-		else switch (state)
-		{
-		case 0:
-			if (b == ':')
-			{
-				state = 1; // prefix
-			}
-			else if (b == 32)
-			{
-				// do nothing
-			}
-			else
-			{
-				m.command = Character.toString((char) b);
-				state = 2; // command
-			}
-			break;
+                    if (b == 10) {
+                        q.putMessage(m);
+                        m = new IRCMessage();
+                        state = 0;
+                    } else if (b == 13) {
+                        // do nothing
+                    } else switch (state) {
+                        case 0:
+                            if (b == ':') {
+                                state = 1; // prefix
+                            } else if (b == 32) {
+                                // do nothing
+                            } else {
+                                m.command = Character.toString((char) b);
+                                state = 2; // command
+                            }
+                            break;
 
-		case 1:
-			if (b == 32)
-			{
-				state = 2; // command is next
-			}
-			else
-			{
-				m.prefix = m.prefix + Character.toString((char) b);
-			}
-			break;
+                        case 1:
+                            if (b == 32) {
+                                state = 2; // command is next
+                            } else {
+                                m.prefix = m.prefix + (char) b;
+                            }
+                            break;
 
-		case 2:
-			if (b == 32)
-			{
-				state = 3; // params
-				m.numParams = 1;
-				m.params[ m.numParams-1 ] = "";
-			}	
-			else
-			{
-				m.command = m.command + Character.toString((char) b);
-			}
-			break;
+                        case 2:
+                            if (b == 32) {
+                                state = 3; // params
+                                m.numParams = 1;
+                                m.params[m.numParams - 1] = "";
+                            } else {
+                                m.command = m.command + (char) b;
+                            }
+                            break;
 
-		case 3:
-			if (b == 32)
-			{
-				m.numParams ++;
-				if (m.numParams >= m.params.length)
-				{
-					state = 5; // ignore the rest
-				}
+                        case 3:
+                            if (b == 32) {
+                                m.numParams++;
+                                if (m.numParams >= m.params.length) {
+                                    state = 5; // ignore the rest
+                                }
 
-				m.params[ m.numParams-1 ] = "";
-			}
-			else if ((b == ':') && (m.params[ m.numParams-1 ].length() == 0))
-			{
-				state = 4; // rest of line is this param
-			}
-			else
-			{
-				m.params[ m.numParams-1 ] = m.params[ m.numParams-1 ] + Character.toString((char) b);
-			}
-			break;
+                                m.params[m.numParams - 1] = "";
+                            } else if ((b == ':') && (m.params[m.numParams - 1].isEmpty())) {
+                                state = 4; // rest of line is this param
+                            } else {
+                                m.params[m.numParams - 1] = m.params[m.numParams - 1] + (char) b;
+                            }
+                            break;
 
-		case 4:
-			m.params[ m.numParams-1 ] = m.params[ m.numParams-1 ] + Character.toString((char) b);
-			break;
-				
-				
-		}
+                        case 4:
+                            m.params[m.numParams - 1] = m.params[m.numParams - 1] + (char) b;
+                            break;
 
-		}
 
-		} /* for */
-	}
-		
-		
-		
-	}
+                    }
+
+                }
+
+            }
+        }
+
+
+    }
 }

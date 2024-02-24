@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB;
 
 import java.util.Date;
-import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
@@ -31,14 +31,14 @@ import java.util.regex.Pattern;
 public interface IRCDDBExtApp extends IRCApplication, Runnable
 {
 
-	public class DatabaseObject
+	class DatabaseObject
 	{
 		public Date modTime;
 		public String key;
 		public String value;
 	}
 
-	public class UpdateResult
+	class UpdateResult
 	{
 		public boolean keyWasNew;
 		public boolean hideFromLog;
@@ -53,19 +53,19 @@ public interface IRCDDBExtApp extends IRCApplication, Runnable
 		}
 	}
 
-	public boolean setParams( Properties p,  int numberOfTables,
+	boolean setParams( Properties p,  int numberOfTables,
 		Pattern[] keyPattern, Pattern[] valuePattern );
 
-	public UpdateResult dbUpdate( int tableID, Date d, String key, String value, String ircUser, String msg );
+	UpdateResult dbUpdate( int tableID, Date d, String key, String value, String ircUser, String msg );
 
-	public LinkedList<DatabaseObject> getDatabaseObjects( 
+	List<DatabaseObject> getDatabaseObjects(
 		int tableID, Date beginDate, int numberOfObjects );
 
-	public Date getLastEntryDate(int tableID);
+	Date getLastEntryDate(int tableID);
 
-	public boolean needsDatabaseUpdate(int tableID);
+	boolean needsDatabaseUpdate(int tableID);
 
-	public void setCurrentServerNick(String nick);
+	void setCurrentServerNick(String nick);
 }
 
 

@@ -28,11 +28,11 @@ public class IRCMessage
 
 	public String prefix;
 	public String command;
-	public String params[];
+	public String[] params;
 
 	public int numParams;
 	
-	StringBuffer prefixComponents[];
+	StringBuffer[] prefixComponents;
 	boolean prefixParsed;
 
 	public IRCMessage ()
@@ -139,7 +139,7 @@ public class IRCMessage
 
 		java.io.PrintWriter p = new java.io.PrintWriter(os);
 
-		if (prefix.length() > 0)
+		if (!prefix.isEmpty())
 		{
 			p.format(":%s ", prefix);
 		}

@@ -22,14 +22,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB;
 
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Random;
 
 
 class IRCProtocol
 {
+	private static final Logger LOGGER = LogManager.getLogger(IRCProtocol.class);
 
 	String name;
-	String nicks[];
+	String[] nicks;
 	String password;
 	String channel;
 	String debugChannel;
@@ -86,11 +90,11 @@ class IRCProtocol
 	
 	void setNetworkReady(boolean b)
 	{
-		if (b == true)
+		if (b)
 		{
 			if (state != 0)
 			{
-				Dbg.println(Dbg.WARN, "IRCProtocol/netReady: unexpected");
+				LOGGER.warn("IRCProtocol/netReady: unexpected");
 			}
 			
 			state = 1;
@@ -110,8 +114,6 @@ class IRCProtocol
 		{
 			timer --;
 		}
-
-		// System.out.println("timer = " + timer);
 		
 		while (recvQ.messageAvailable())
 		{
@@ -128,161 +130,122 @@ class IRCProtocol
 				}
 				System.out.println();
 			}
-	
-			if (m.command.equals("004"))
-			{
-				if (state == 4)
-				{
-					state = 5;  // next: JOIN
-				}
-			}
-			else if (m.command.equals("PING"))
-			{
-				IRCMessage m2 = new IRCMessage();
-				m2.command = "PONG";
-				m2.numParams = 1;
-				m2.params[0] = m.params[0];
-				sendQ.putMessage(m2);
-			}
-			else if (m.command.equals("JOIN"))
-			{
-				if ((m.numParams >= 1) && m.params[0].equals(channel))
-				{
-					if (m.getPrefixNick().equals(currentNick) && (state == 6))
-					{
-					  if (debugChannel != null)
-					  {
-					    state = 7;  // next: join debug_channel
-					  }
-					  else
-					  {
-					    state = 10; // next: WHO *
-					  }
-					}
-					else if (app != null)
-					{
-						app.userJoin( m.getPrefixNick(), m.getPrefixName(), m.getPrefixHost());
-					}
-				}
 
-				if ((m.numParams >= 1) && m.params[0].equals(debugChannel))
-				{
-					if (m.getPrefixNick().equals(currentNick) && (state == 8))
-					{
-						state = 10; // next: WHO *
-					}
-				}
-			}
-			else if (m.command.equals("PONG"))
-			{
-				if (state == 12)
-				{
-					timer = pingTimer;
-					state = 11;
-				}
-			}
-			else if (m.command.equals("PART"))
-			{
-				if ((m.numParams >= 1) && m.params[0].equals(channel))
-				{
-					if (app != null)
-					{
-						app.userLeave( m.getPrefixNick() );
-					}
-				}
-			}
-			else if (m.command.equals("KICK"))
-			{
-				if ((m.numParams >= 2) && m.params[0].equals(channel))
-				{
-					if (m.params[1].equals(currentNick))
-					{
-						// i was kicked!!
-						return false;
-					}
-					else if (app != null)
-					{
-						app.userLeave( m.params[1] );
-					}
-				}
-			}
-			else if (m.command.equals("QUIT"))
-			{
-				if (app != null)
-				{
-					app.userLeave( m.getPrefixNick() );
-				}
-			}
-			else if (m.command.equals("MODE"))
-			{
-			  if ((m.numParams >= 3) && m.params[0].equals(channel))
-			  {
-			    if (app != null)
-			    {
-			      int i;
-			      String mode = m.params[1];
+            switch (m.command) {
+                case "004" -> {
+                    if (state == 4) {
+                        state = 5;  // next: JOIN
+                    }
+                }
+                case "PING" -> {
+                    IRCMessage m2 = new IRCMessage();
+                    m2.command = "PONG";
+                    m2.numParams = 1;
+                    m2.params[0] = m.params[0];
+                    sendQ.putMessage(m2);
+                }
+                case "JOIN" -> {
+                    if ((m.numParams >= 1) && m.params[0].equals(channel)) {
+                        if (m.getPrefixNick().equals(currentNick) && (state == 6)) {
+                            if (debugChannel != null) {
+                                state = 7;  // next: join debug_channel
+                            } else {
+                                state = 10; // next: WHO *
+                            }
+                        } else if (app != null) {
+                            app.userJoin(m.getPrefixNick(), m.getPrefixName(), m.getPrefixHost());
+                        }
+                    }
 
-			      for (i = 1; (i < mode.length()) && (m.numParams >= (i+2)); i++)
-			      {
-				if ( mode.charAt(i) == 'o' )
-				{
-				  if ( mode.charAt(0) == '+' )
-				  {
-				    app.userChanOp(m.params[i+1], true);
-				  }
-				  else if ( mode.charAt(0) == '-' )
-				  {
-				    app.userChanOp(m.params[i+1], false);
-				  }
-				}
-			      } // for
-			    } // app != null
-			  }
-			}
-			else if (m.command.equals("PRIVMSG"))
-			{
-				if ((m.numParams == 2) && (app != null))
-				{
-					if (m.params[0].equals(channel))
-					{
-						app.msgChannel(m);
-					}
-					else if (m.params[0].equals(currentNick))
-					{
-						app.msgQuery(m);
-					}
-				}
-			}
-			else if (m.command.equals("352"))  // WHO list
-			{
-				if ((m.numParams >= 7) && m.params[0].equals(currentNick)
-					&& m.params[1].equals(channel))
-				{
-					if (app != null)
-					{
-						app.userJoin( m.params[5], m.params[2], m.params[3]);
-						app.userChanOp ( m.params[5], m.params[6].equals("H@"));
-					}
-				}
-			}
-			else if (m.command.equals("433"))  // nick collision
-			{
-				if (state == 2)
-				{
-					state = 3;  // nick collision, choose new nick
-					timer = 10; // wait 5 seconds..
-				}
-			}
-			else if (m.command.equals("332") ||
-					m.command.equals("TOPIC"))  // topic
-			{
-				if ((m.numParams == 2) && (app != null) &&
-					m.params[0].equals(channel) )
+                    if ((m.numParams >= 1) && m.params[0].equals(debugChannel)) {
+                        if (m.getPrefixNick().equals(currentNick) && (state == 8)) {
+                            state = 10; // next: WHO *
+                        }
+                    }
+                }
+                case "PONG" -> {
+                    if (state == 12) {
+                        timer = pingTimer;
+                        state = 11;
+                    }
+                }
+                case "PART" -> {
+                    if ((m.numParams >= 1) && m.params[0].equals(channel)) {
+                        if (app != null) {
+                            app.userLeave(m.getPrefixNick());
+                        }
+                    }
+                }
+                case "KICK" -> {
+                    if ((m.numParams >= 2) && m.params[0].equals(channel)) {
+                        if (m.params[1].equals(currentNick)) {
+                            // i was kicked!!
+                            return false;
+                        } else if (app != null) {
+                            app.userLeave(m.params[1]);
+                        }
+                    }
+                }
+                case "QUIT" -> {
+                    if (app != null) {
+                        app.userLeave(m.getPrefixNick());
+                    }
+                }
+                case "MODE" -> {
+                    if ((m.numParams >= 3) && m.params[0].equals(channel)) {
+                        if (app != null) {
+                            int i;
+                            String mode = m.params[1];
 
-				{
-					app.setTopic(m.params[1]);
-				}
-			}
+                            for (i = 1; (i < mode.length()) && (m.numParams >= (i + 2)); i++) {
+                                if (mode.charAt(i) == 'o') {
+                                    if (mode.charAt(0) == '+') {
+                                        app.userChanOp(m.params[i + 1], true);
+                                    } else if (mode.charAt(0) == '-') {
+                                        app.userChanOp(m.params[i + 1], false);
+                                    }
+                                }
+                            } // for
+                        } // app != null
+                    }
+                }
+                case "PRIVMSG" -> {
+                    if ((m.numParams == 2) && (app != null)) {
+                        if (m.params[0].equals(channel)) {
+                            app.msgChannel(m);
+                        } else if (m.params[0].equals(currentNick)) {
+                            app.msgQuery(m);
+                        }
+                    }
+                }
+                case "352" -> {
+// WHO list
+
+                    if ((m.numParams >= 7) && m.params[0].equals(currentNick)
+                            && m.params[1].equals(channel)) {
+                        if (app != null) {
+                            app.userJoin(m.params[5], m.params[2], m.params[3]);
+                            app.userChanOp(m.params[5], m.params[6].equals("H@"));
+                        }
+                    }
+                }
+                case "433" -> {
+// nick collision
+
+                    if (state == 2) {
+                        state = 3;  // nick collision, choose new nick
+                        timer = 10; // wait 5 seconds..
+                    }
+                }
+                case "332", "TOPIC" -> {
+// topic
+
+                    if ((m.numParams == 2) && (app != null) &&
+                            m.params[0].equals(channel)) {
+                        app.setTopic(m.params[1]);
+                    }
+                }
+            }
 		}
 		
 		IRCMessage m;

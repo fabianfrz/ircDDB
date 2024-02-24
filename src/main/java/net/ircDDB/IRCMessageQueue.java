@@ -27,7 +27,7 @@ package net.ircDDB;
 public class IRCMessageQueue
 {
 
-	class Item
+	static class Item
 	{
 
 		Item prev;

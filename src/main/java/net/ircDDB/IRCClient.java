@@ -22,15 +22,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB;
 
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.Random;
 
 
 public class IRCClient implements Runnable
 {
+	private static final Logger LOGGER = LogManager.getLogger(IRCClient.class);
 
 	IRCReceiver recv;
 	IRCMessageQueue recvQ;
@@ -73,15 +82,15 @@ public class IRCClient implements Runnable
   boolean init()
   {
 
-    java.net.InetAddress adr[] = null;
+    InetAddress[] adr;
 
     try
     {
-      adr = java.net.InetAddress.getAllByName(host);
+      adr = InetAddress.getAllByName(host);
     }
-    catch (java.net.UnknownHostException e)
+    catch (UnknownHostException e)
     {
-      Dbg.println(Dbg.ERR, "IRCClient/unknown host " + e);
+      LOGGER.error("IRCClient/unknown host", e);
       return false;
     }
 
@@ -94,17 +103,17 @@ public class IRCClient implements Runnable
 
         int i;
 
-        Dbg.println(Dbg.INFO, "IRCClient/found " + num + " addresses:");
+        LOGGER.info("IRCClient/found " + num + " addresses:");
 
-        int shuffle[] = new int[num];
+        int[] shuffle = new int[num];
 
         for (i=0; i < num; i++)
         {
-          Dbg.println(Dbg.INFO, "  " + adr[i].getHostAddress());
+          LOGGER.info("  " + adr[i].getHostAddress());
           shuffle[i] = i;
         }
 
-        java.util.Random r = new java.util.Random();
+        Random r = new Random();
 
         for (i=0; i < (num - 1); i++)
         {
@@ -132,22 +141,22 @@ public class IRCClient implements Runnable
 
         for (i=0; i < num; i++)
         {
-          java.net.InetAddress a = adr[shuffle[i]];
+          InetAddress a = adr[shuffle[i]];
 
-          if (a instanceof java.net.Inet4Address)
+          if (a instanceof Inet4Address)
           {
-            Dbg.println(Dbg.INFO, "IRCClient/trying: " + a.getHostAddress());
+            LOGGER.info("IRCClient/trying: " + a.getHostAddress());
 
             try
             {
-              socket = new java.net.Socket();
-              java.net.InetSocketAddress endp = new java.net.InetSocketAddress(a, port);
+              socket = new Socket();
+              InetSocketAddress endp = new InetSocketAddress(a, port);
 
               socket.connect(endp, 5000);  // 5 seconds timeout
             }
-            catch (java.io.IOException e)
+            catch (IOException e)
             {
-              Dbg.println(Dbg.WARN, "IRCClient/ioexception: " + e);
+              LOGGER.warn("IRCClient/ioexception: " + e);
               socket = null;
             }
 
@@ -161,14 +170,14 @@ public class IRCClient implements Runnable
       }
       else
       {
-        Dbg.println(Dbg.ERR, "IRCClient/invalid number of addresses: " + adr.length);
+        LOGGER.error("IRCClient/invalid number of addresses: " + adr.length);
 	return false;
       }
     }
 
     if (socket == null)
     {
-      Dbg.println(Dbg.ERR, "IRCClient: no connection");
+      LOGGER.error("IRCClient: no connection");
       return false;
     }
 
@@ -182,7 +191,7 @@ public class IRCClient implements Runnable
     }
     catch (IOException e)
     {
-      Dbg.println(Dbg.ERR, "IRCClient/getOutputStream: " + e);
+      LOGGER.error("IRCClient/getOutputStream: ", e);
       return false;
     }
 
@@ -194,7 +203,7 @@ public class IRCClient implements Runnable
     }
     catch (IOException e)
     {
-      Dbg.println(Dbg.ERR, "IRCClient/getInputStream: " + e);
+      LOGGER.error("IRCClient/getInputStream: ", e);
       return false;
     }
 
@@ -208,7 +217,7 @@ public class IRCClient implements Runnable
     }
     catch (IllegalThreadStateException e)
     {
-      Dbg.println(Dbg.ERR, "IRCClient/Thread.start: " + e);
+      LOGGER.error("IRCClient/Thread.start: ", e);
       return false;
     }
 
@@ -235,7 +244,7 @@ public class IRCClient implements Runnable
 			}
 			catch (IOException e)
 			{
-				Dbg.println(Dbg.WARN, "IRCClient/socket.shutdownInput: " + e);
+				LOGGER.warn("IRCClient/socket.shutdownInput: ", e);
 			}
 
 			try
@@ -244,7 +253,7 @@ public class IRCClient implements Runnable
 			}
 			catch (IOException e)
 			{
-				Dbg.println(Dbg.WARN, "IRCClient/socket.close: " + e);
+				LOGGER.warn("IRCClient/socket.close: ", e);
 			}
 	
 		}
@@ -272,10 +281,10 @@ public class IRCClient implements Runnable
 				switch(state)
 				{
 				case 0:
-					Dbg.println(Dbg.INFO, "IRCClient: connect request");
+					LOGGER.info("IRCClient: connect request");
 					if (init())
 					{
-						Dbg.println(Dbg.INFO, "IRCClient: connected");
+						LOGGER.info("IRCClient: connected");
 						state = 1;
 						timer = 1;
 					}
@@ -292,7 +301,7 @@ public class IRCClient implements Runnable
 						timer = 0;
 						state = 2;
 					}
-					else if (proto.processQueues(recvQ, sendQ) == false)
+					else if (!proto.processQueues(recvQ, sendQ))
 					{
 						timer = 0;
 						state = 2;
@@ -308,7 +317,7 @@ public class IRCClient implements Runnable
 						}
 						catch(IOException e)
 						{
-							Dbg.println(Dbg.ERR, "IRCClient/write: " +e);
+							LOGGER.error("IRCClient/write: ", e);
 							timer = 0;
 							state = 2;
 						}
@@ -333,7 +342,8 @@ public class IRCClient implements Runnable
 			}
 			catch ( InterruptedException e )
 			{
-				Dbg.println(Dbg.WARN, "sleep interrupted " + e);
+				Thread.currentThread().interrupt(); // restore interrupt flag
+				LOGGER.warn("sleep interrupted " + e);
 			}
 		}
 
