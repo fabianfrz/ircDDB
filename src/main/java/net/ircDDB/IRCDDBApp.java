@@ -32,6 +32,7 @@ import java.text.ParseException;
 import java.time.Instant;
 import java.util.*;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -45,10 +46,10 @@ import java.io.FileOutputStream;
 public class IRCDDBApp implements IRCApplication, Runnable {
     private static final Logger LOGGER = LogManager.getLogger(IRCDDBApp.class);
 
-    private IRCDDBExtApp extApp;
+    private final IRCDDBExtApp extApp;
 
     private IRCMessageQueue sendQ;
-    private Map<String, UserObject> user;
+    private final Map<String, UserObject> user = new ConcurrentHashMap<>();
     private String currentServer;
 
     private String myNick;
@@ -56,25 +57,25 @@ public class IRCDDBApp implements IRCApplication, Runnable {
     int state;
     int timer;
 
-    private Pattern datePattern;
-    private Pattern timePattern;
-    private Pattern[] keyPattern;
-    private Pattern[] valuePattern;
-    private Pattern tablePattern;
-    private Pattern hexcharPattern;
-    private Pattern defaultValuePattern;
+    private final Pattern datePattern;
+    private final Pattern timePattern;
+    private final Pattern[] keyPattern;
+    private final Pattern[] valuePattern;
+    private final Pattern tablePattern;
+    private final Pattern hexcharPattern;
+    private final Pattern defaultValuePattern;
 
-    private SimpleDateFormat parseDateFormat;
+    private final SimpleDateFormat parseDateFormat;
 
-    private String updateChannel;
-    private String debugChannel;
+    private final String updateChannel;
+    private final String debugChannel;
 
     private boolean acceptPublicUpdates;
-    private IRCMessageQueue[] publicUpdates;
+    private final IRCMessageQueue[] publicUpdates;
 
-    private String dumpUserDBFileName;
+    private final String dumpUserDBFileName;
 
-    private int numberOfTables;
+    private final int numberOfTables;
     private int numberOfTablesToSync;
 
     private Properties properties;
@@ -299,7 +300,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
     }
 
     public void userListReset() {
-        user = Collections.synchronizedMap(new HashMap<>());
+        user.clear();
 
         if (extApp != null) {
             extApp.userListReset();
@@ -365,10 +366,10 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 String t = s.next(timePattern);
 
 
-                Date dbDate;
+                Instant dbDate;
 
                 try {
-                    dbDate = parseDateFormat.parse(d + " " + t);
+                    dbDate = parseDateFormat.parse(d + " " + t).toInstant();
                 } catch (ParseException e) {
                     dbDate = null;
                 }
@@ -541,14 +542,14 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                     if (result != null) {
                         boolean sendUpdate = false;
 
-                        if (result.keyWasNew) {
+                        if (result.isKeyWasNew()) {
                             sendUpdate = true;
                         } else {
 
-                            if (result.newObj.value.equals(result.oldObj.value)) // value is the same
+                            if (result.getNewObj().getValue().equals(result.getOldObj().getValue()))
                             {
-                                long newMillis = result.newObj.modTime.getTime();
-                                long oldMillis = result.oldObj.modTime.getTime();
+                                long newMillis = result.getNewObj().getModTime().getNano() / 1000;
+                                long oldMillis = result.getOldObj().getModTime().getNano() / 1000;
 
                                 if (newMillis > (oldMillis + 2400000))  // update max. every 40 min
                                 {
@@ -570,8 +571,8 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                             m2.numParams = 2;
                             m2.params[0] = updateChannel;
                             m2.params[1] = getTableIDString(tableID, false) +
-                                    parseDateFormat.format(result.newObj.modTime) + " " +
-                                    result.newObj.key + " " + result.newObj.value + "  (from: " + m.getPrefixNick() + ")";
+                                    parseDateFormat.format(Date.from(result.getNewObj().getModTime())) + " " +
+                                    result.getNewObj().getKey() + " " + result.getNewObj().getValue() + "  (from: " + m.getPrefixNick() + ")";
 
                             IRCMessageQueue q = getSendQ();
                             if (q != null) {
@@ -583,30 +584,28 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                         boolean isSTNCall = false;
 
                         if (tableID == 0) {
-                            isSTNCall = result.newObj.key.startsWith("STN");
+                            isSTNCall = result.getNewObj().getKey().startsWith("STN");
                             privCommand = checkPrivCommand(msg);
                         }
 
                         if (privCommand != null) {
                             String setPriv = null;
 
-                            if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON"))
-                                    && (!result.hideFromLog)) {
+                            if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON")) && (!result.isHideFromLog())) {
                                 setPriv = "P_______";
                             }
 
-                            if (privCommand.equals("PRIV_OFF")
-                                    && (result.hideFromLog)) {
+                            if (privCommand.equals("PRIV_OFF") && (result.isHideFromLog())) {
                                 setPriv = "X_______";
                             }
 
                             if ((privCommand.equals("VIS_OFF_") || privCommand.equals("VIS__OFF"))
-                                    && (!result.hideFromLog)) {
+                                    && (!result.isHideFromLog())) {
                                 setPriv = "P_______";
                             }
 
                             if ((privCommand.equals("VIS_ON__") || privCommand.equals("VIS__ON_") || privCommand.equals("VIS___ON"))
-                                    && (result.hideFromLog)) {
+                                    && (result.isHideFromLog())) {
                                 setPriv = "X_______";
                             }
 
@@ -618,8 +617,8 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                                 m2.numParams = 2;
                                 m2.params[0] = updateChannel;
                                 m2.params[1] = getTableIDString(2, false) +
-                                        parseDateFormat.format(result.newObj.modTime) + " " +
-                                        result.newObj.key + " " + setPriv + "  (from: " + m.getPrefixNick() + ")";
+                                        parseDateFormat.format(result.getNewObj().getModTime()) + " " +
+                                        result.getNewObj().getKey() + " " + setPriv + "  (from: " + m.getPrefixNick() + ")";
 
                                 IRCMessageQueue q = getSendQ();
                                 if (q != null) {
@@ -627,19 +626,19 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                                 }
 
                                 if (extApp != null) {
-                                    extApp.dbUpdate(2, result.newObj.modTime, result.newObj.key, setPriv, myNick, null);
+                                    extApp.dbUpdate(2, result.getNewObj().getModTime(), result.getNewObj().getKey(), setPriv, myNick, null);
                                 }
 
                             }
                         }
 
-                        if ((debugChannel != null) && (result.modifiedLogLine != null)
+                        if ((debugChannel != null) && (result.getModifiedLogLine() != null)
                                 && (privCommand == null) && (!isSTNCall)) {
                             IRCMessage m2 = new IRCMessage();
                             m2.command = "PRIVMSG";
                             m2.numParams = 2;
                             m2.params[0] = debugChannel;
-                            m2.params[1] = m.getPrefixNick() + ": UPDATE OK: " + result.modifiedLogLine;
+                            m2.params[1] = m.getPrefixNick() + ": UPDATE OK: " + result.getModifiedLogLine();
 
                             IRCMessageQueue q = getSendQ();
                             if (q != null) {
@@ -676,10 +675,10 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                         String t = s.next(timePattern);
 
 
-                        Date dbDate = null;
+                        Instant dbDate;
 
                         try {
-                            dbDate = parseDateFormat.parse(d + " " + t);
+                            dbDate = parseDateFormat.parse(d + " " + t).toInstant();
                         } catch (ParseException e) {
                             dbDate = null;
                         }
@@ -696,8 +695,8 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                                     IRCMessage m3 = new IRCMessage(
                                             m.getPrefixNick(),
                                             "UPDATE" + getTableIDString(tableID, true) +
-                                                    " " + parseDateFormat.format(o.modTime) + " "
-                                                    + o.key + " " + o.value);
+                                                    " " + parseDateFormat.format(o.getModTime()) + " "
+                                                    + o.getKey() + " " + o.getValue());
 
                                     IRCMessageQueue q = getSendQ();
                                     if (q != null) {
@@ -854,7 +853,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
 
         if (extApp != null) {
 
-            Date d = extApp.getLastEntryDate(tableID);
+            Instant d = extApp.getLastEntryDate(tableID);
 
             if (d != null) {
                 return parseDateFormat.format(d);
@@ -908,7 +907,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                             m2.command = "PRIVMSG";
                             m2.numParams = 2;
                             m2.params[0] = currentServer;
-                            m2.params[1] = "IRCDDB " + parseDateFormat.format(startupTime) + " " +
+                            m2.params[1] = "IRCDDB " + parseDateFormat.format(Date.from(startupTime)) + " " +
                                     reconnectReason;
 
                             IRCMessageQueue q = getSendQ();
@@ -1169,7 +1168,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
         String version = "";
         Package pkg;
 
-		pkg = Package.getPackage("net.ircDDB");
+		pkg = IRCDDBApp.class.getClassLoader().getDefinedPackage("net.ircDDB");
 
 
         if (pkg != null) {
@@ -1187,7 +1186,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
         try (var is = Files.newInputStream(Paths.get("ircDDB.properties"))) {
             properties.load(is);
         } catch (IOException e) {
-            System.out.println("could not open file 'ircDDB.properties'");
+            LOGGER.error("could not open file 'ircDDB.properties'", e);
             System.exit(1);
         }
 
@@ -1250,7 +1249,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
             try {
                 Class<?> extAppClass = Class.forName(extAppName);
 
-                extApp = (IRCDDBExtApp) extAppClass.newInstance();
+                extApp = (IRCDDBExtApp) extAppClass.getDeclaredConstructor().newInstance();
 
                 if (!extApp.setParams(properties, numTables, keyPattern, valuePattern)) {
                     LOGGER.error("ext_app setParams failed - exit.");
@@ -1332,9 +1331,12 @@ public class IRCDDBApp implements IRCApplication, Runnable {
         IRCClient irc = new IRCClient(app,
                 properties.getProperty("irc_server_name", "localhost"),
                 Integer.parseInt(properties.getProperty("irc_server_port", "9007")),
-                irc_channel, debug_channel,
-                irc_name, n,
-                properties.getProperty("irc_password", "secret"), debug,
+                irc_channel,
+                debug_channel,
+                irc_name,
+                n,
+                properties.getProperty("irc_password", "secret"),
+                debug,
                 version);
 
 
