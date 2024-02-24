@@ -32,23 +32,23 @@ class IRCProtocol
 {
 	private static final Logger LOGGER = LogManager.getLogger(IRCProtocol.class);
 
-	String name;
-	String[] nicks;
-	String password;
-	String channel;
-	String debugChannel;
-	String currentNick;
+	private final String name;
+	private final String[] nicks;
+	private final String password;
+	private final String channel;
+	private final String debugChannel;
+	private String currentNick;
 	
-	int state;
-	int timer;
-	int pingTimer;
+	private int state;
+	private int timer;
+	private final int pingTimer;
 	
-	Random r;
+	private final Random r;
 	
-	IRCApplication app;
+	private final IRCApplication app;
 
-	boolean debug;
-	String version;
+	private final boolean debug;
+	private final String version;
 	
 	IRCProtocol(IRCApplication a, String ch, String dbg_chan, String n, String[] u, String pass,
 		 boolean dbg, String v)

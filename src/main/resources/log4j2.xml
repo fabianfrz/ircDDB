@@ -2,7 +2,7 @@
 <Configuration name="irdDDB" status="ERROR" monitorInterval="5">
     <Appenders>
         <Console name="Out">
-            <PatternLayout pattern="%m%n"/>
+            <PatternLayout pattern="[%threadName] %-5level %logger{36} - %message{nolookups}%xThrowable{separator(|)}%n"/>
         </Console>
     </Appenders>
     <Loggers>

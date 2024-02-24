@@ -30,10 +30,10 @@ public class IRCMessageQueue
 	static class Item
 	{
 
-		Item prev;
-		Item next;
+		private Item prev;
+		private Item next;
 
-		IRCMessage msg;
+		private IRCMessage msg;
 
 		Item(IRCMessage m)
 		{	
@@ -42,10 +42,10 @@ public class IRCMessageQueue
 
 	}
 
-	boolean eof;
+	private boolean eof;
 
-	Item first;
-	Item last;
+	private Item first;
+	private Item last;
 
 
 	public IRCMessageQueue()
@@ -74,14 +74,13 @@ public class IRCMessageQueue
 
 	public synchronized IRCMessage getMessage()
 	{
-		Item k;
 
-		if (first == null)
+        if (first == null)
 		{
 			return null;
 		}
 
-		k = first;
+        Item k = first;
 
 		first = k.next;
 

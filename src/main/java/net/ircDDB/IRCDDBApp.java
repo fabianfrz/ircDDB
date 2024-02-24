@@ -25,6 +25,7 @@ package net.ircDDB;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.Security;
@@ -39,8 +40,9 @@ import java.util.regex.PatternSyntaxException;
 import java.text.SimpleDateFormat;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.io.FileOutputStream;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 
 public class IRCDDBApp implements IRCApplication, Runnable {
@@ -540,26 +542,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                     IRCDDBExtApp.UpdateResult result = processUpdate(tableID, s, other.nick, msg);
 
                     if (result != null) {
-                        boolean sendUpdate = false;
-
-                        if (result.isKeyWasNew()) {
-                            sendUpdate = true;
-                        } else {
-
-                            if (result.getNewObj().getValue().equals(result.getOldObj().getValue()))
-                            {
-                                long newMillis = result.getNewObj().getModTime().getNano() / 1000;
-                                long oldMillis = result.getOldObj().getModTime().getNano() / 1000;
-
-                                if (newMillis > (oldMillis + 2400000))  // update max. every 40 min
-                                {
-                                    sendUpdate = true;
-                                }
-                            } else {
-                                sendUpdate = true;  // value has changed, send update via channel
-                            }
-
-                        }
+                        boolean sendUpdate = shouldUpdateBeSent(result);
 
                         UserObject me = user.get(myNick);
 
@@ -833,10 +816,32 @@ public class IRCDDBApp implements IRCApplication, Runnable {
         }
     }
 
+    private boolean shouldUpdateBeSent(IRCDDBExtApp.UpdateResult result) {
+        boolean sendUpdate = false;
+
+        if (result.isKeyWasNew()) {
+            sendUpdate = true;
+        } else {
+
+            if (result.getNewObj().getValue().equals(result.getOldObj().getValue()))
+            {
+                long newMillis = result.getNewObj().getModTime().getNano() / 1000;
+                long oldMillis = result.getOldObj().getModTime().getNano() / 1000;
+
+                if (newMillis > (oldMillis + 2400000))  // update max. every 40 min
+                {
+                    sendUpdate = true;
+                }
+            } else {
+                sendUpdate = true;  // value has changed, send update via channel
+            }
+
+        }
+        return sendUpdate;
+    }
+
 
     public synchronized void setSendQ(IRCMessageQueue s) {
-        // System.out.println("APP: setQ " + s);
-
         sendQ = s;
 
         if (extApp != null) {
@@ -875,8 +880,6 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 timer--;
             }
 
-            // System.out.println("state " + state);
-
             channelTimeout++;
 
 
@@ -895,197 +898,28 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                     break;
 
                 case 2:   // choose server
-                    LOGGER.debug("IRCDDBApp: state=2 choose new 's-'-user");
-                    if (getSendQ() == null) {
-                        state = 10;
-                        reconnectReason = "getSendQ in state 2";
-                    } else {
-                        if (findServerUser()) {
-                            sendlistTableID = numberOfTablesToSync;
-
-                            IRCMessage m2 = new IRCMessage();
-                            m2.command = "PRIVMSG";
-                            m2.numParams = 2;
-                            m2.params[0] = currentServer;
-                            m2.params[1] = "IRCDDB " + parseDateFormat.format(Date.from(startupTime)) + " " +
-                                    reconnectReason;
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m2);
-                            }
-
-                            if (rptrLocation != null) {
-                                m2 = new IRCMessage();
-                                m2.command = "PRIVMSG";
-                                m2.numParams = 2;
-                                m2.params[0] = currentServer;
-                                m2.params[1] = "IRCDDB QTH: " + rptrLocation;
-                                q = getSendQ();
-                                if (q != null) {
-                                    q.putMessage(m2);
-                                }
-                            }
-
-                            if ((rptrFrequencies != null) && (numRptrFreq > 0)) {
-                                int i;
-
-                                for (i = 0; i < numRptrFreq; i++) {
-                                    if (rptrFrequencies[i] != null) {
-                                        m2 = new IRCMessage();
-                                        m2.command = "PRIVMSG";
-                                        m2.numParams = 2;
-                                        m2.params[0] = currentServer;
-                                        m2.params[1] = "IRCDDB QRG: " + rptrFrequencies[i];
-                                        q = getSendQ();
-                                        if (q != null) {
-                                            q.putMessage(m2);
-                                        }
-                                    }
-                                }
-                            }
-
-                            if ((rptrInfoURL != null) && (!rptrInfoURL.isEmpty())) {
-                                m2 = new IRCMessage();
-                                m2.command = "PRIVMSG";
-                                m2.numParams = 2;
-                                m2.params[0] = currentServer;
-                                m2.params[1] = "IRCDDB URL: " + rptrInfoURL;
-                                q = getSendQ();
-                                if (q != null) {
-                                    q.putMessage(m2);
-                                }
-                            }
-
-
-                            if (extApp != null) {
-                                state = 3; // next: send "SENDLIST"
-                            } else {
-                                state = 6; // next: enablePublicUpdates
-                            }
-                        } else if (timer == 0) {
-                            state = 10;
-                            reconnectReason = "timeout in state 2";
-
-                            IRCMessage m = new IRCMessage();
-                            m.command = "QUIT";
-                            m.numParams = 1;
-                            m.params[0] = "no op user with 's-' found.";
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m);
-                            }
-                        }
-                    }
+                    sendlistTableID = getState2SendlistTableID(sendlistTableID);
                     break;
 
                 case 3:
-                    if (getSendQ() == null) {
-                        state = 10; // disconnect DB
-                        reconnectReason = "getSendQ in state 3";
-                    } else {
-                        sendlistTableID--;
-                        if (sendlistTableID < 0) {
-                            state = 6; // end of sendlist
-                        } else {
-                            LOGGER.debug("IRCDDBApp: state=3 tableID=" + sendlistTableID);
-                            state = 4; // send "SENDLIST"
-                            timer = 900; // 15 minutes max for update
-                        }
-                    }
+                    sendlistTableID = getState3SendlistTableID(sendlistTableID);
                     break;
 
                 case 4:
-                    if (getSendQ() == null) {
-                        state = 10; // disconnect DB
-                        reconnectReason = "getSendQ in state 4";
-                    } else {
-                        if (extApp.needsDatabaseUpdate(sendlistTableID)) {
-                            IRCMessage m = new IRCMessage();
-                            m.command = "PRIVMSG";
-                            m.numParams = 2;
-                            m.params[0] = currentServer;
-                            m.params[1] = "SENDLIST" + getTableIDString(sendlistTableID, true)
-                                    + " " + getLastEntryTime(sendlistTableID);
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m);
-                            }
-
-                            state = 5; // wait for answers
-                        } else {
-                            state = 3; // don't send SENDLIST for this table, go to next table
-                        }
-                    }
+                    getState4SendListTableId(sendlistTableID);
                     break;
 
                 case 5: // sendlist processing
-                    if (getSendQ() == null) {
-                        state = 10; // disconnect DB
-                        reconnectReason = "getSendQ in state 5";
-                    } else if (timer == 0) {
-                        state = 10;
-                        reconnectReason = "timeout in state 5";
-
-                        IRCMessage m = new IRCMessage();
-                        m.command = "QUIT";
-                        m.numParams = 1;
-                        m.params[0] = "timeout SENDLIST";
-
-                        IRCMessageQueue q = getSendQ();
-                        if (q != null) {
-                            q.putMessage(m);
-                        }
-                    }
+                    getState5SendListTableId();
                     break;
 
                 case 6:
-                    if (getSendQ() == null) {
-                        state = 10; // disconnect DB
-                        reconnectReason = "getSendQ in state 6";
-                    } else {
-                        UserObject me = user.get(myNick);
-
-                        if ((me != null) && (currentServer != null)) {
-                            UserObject other = user.get(currentServer);
-
-                            if ((other != null) && !me.op && other.op
-                                    && other.nick.startsWith("s-") && me.nick.startsWith("s-")) {
-                                IRCMessage m2 = new IRCMessage();
-                                m2.command = "PRIVMSG";
-                                m2.numParams = 2;
-                                m2.params[0] = other.nick;
-                                m2.params[1] = "OP_BEG";
-
-                                IRCMessageQueue q = getSendQ();
-                                if (q != null) {
-                                    q.putMessage(m2);
-                                }
-                            }
-
-
-                            LOGGER.debug("IRCDDBApp: state=6");
-                            enablePublicUpdates();
-                            state = 7;
-                            channelTimeout = 0;
-                        }
-                    }
+                    getState6SendListTableId();
                     break;
 
 
                 case 7: // standby state after initialization
-                    if (getSendQ() == null) {
-                        state = 10; // disconnect DB
-                        reconnectReason = "getSendQ in state 7";
-                    } else {
-                        if (channelTimeout > 600) // 10 minutes with no IRCDDB msg in channel
-                        {
-                            state = 10;
-                            reconnectReason = "timeout waiting for IRCDDB msg";
-                        }
-                    }
+                    getState7SendListTableId();
                     break;
 
                 case 10:
@@ -1114,26 +948,14 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 if (dumpUserDBTimer <= 0) {
                     dumpUserDBTimer = 300;
 
-                    try {
-                        StringBuilder sb = new StringBuilder();
-
-                        synchronized (user) {
-                            Collection<UserObject> c = user.values();
-
-                            for (UserObject o : c) {
-                                sb.append(o.nick).append(" ").append(o.name).append(" ")
-                                    .append(o.host).append(" ").append(o.op).append("\n");
-                            }
+                    try (var writer = new OutputStreamWriter(new FileOutputStream(dumpUserDBFileName), UTF_8)) {
+                        for (UserObject o :  user.values()) {
+                            writer.append(o.nick).append(" ")
+                                    .append(o.name).append(" ")
+                                    .append(o.host).append(" ")
+                                    .append(Boolean.toString(o.op))
+                                    .append("\n");
                         }
-
-                        PrintWriter p = new PrintWriter(
-                                new FileOutputStream(dumpUserDBFileName));
-
-                        p.print(sb);
-
-                        p.close();
-
-
                     } catch (IOException e) {
                         LOGGER.warn("dumpUser failed " + e);
                     } catch (java.util.ConcurrentModificationException e) {
@@ -1146,6 +968,201 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 }
             }
         }
+    }
+
+    private void getState7SendListTableId() {
+        if (getSendQ() == null) {
+            state = 10; // disconnect DB
+            reconnectReason = "getSendQ in state 7";
+        } else {
+            if (channelTimeout > 600) // 10 minutes with no IRCDDB msg in channel
+            {
+                state = 10;
+                reconnectReason = "timeout waiting for IRCDDB msg";
+            }
+        }
+    }
+
+    private void getState6SendListTableId() {
+        if (getSendQ() == null) {
+            state = 10; // disconnect DB
+            reconnectReason = "getSendQ in state 6";
+        } else {
+            UserObject me = user.get(myNick);
+
+            if ((me != null) && (currentServer != null)) {
+                UserObject other = user.get(currentServer);
+
+                if ((other != null) && !me.op && other.op
+                        && other.nick.startsWith("s-") && me.nick.startsWith("s-")) {
+                    IRCMessage m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = other.nick;
+                    m2.params[1] = "OP_BEG";
+
+                    IRCMessageQueue q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+
+
+                LOGGER.debug("IRCDDBApp: state=6");
+                enablePublicUpdates();
+                state = 7;
+                channelTimeout = 0;
+            }
+        }
+    }
+
+    private void getState5SendListTableId() {
+        if (getSendQ() == null) {
+            state = 10; // disconnect DB
+            reconnectReason = "getSendQ in state 5";
+        } else if (timer == 0) {
+            state = 10;
+            reconnectReason = "timeout in state 5";
+
+            IRCMessage m = new IRCMessage();
+            m.command = "QUIT";
+            m.numParams = 1;
+            m.params[0] = "timeout SENDLIST";
+
+            IRCMessageQueue q = getSendQ();
+            if (q != null) {
+                q.putMessage(m);
+            }
+        }
+    }
+
+    private void getState4SendListTableId(int sendlistTableID) {
+        if (getSendQ() == null) {
+            state = 10; // disconnect DB
+            reconnectReason = "getSendQ in state 4";
+        } else {
+            if (extApp.needsDatabaseUpdate(sendlistTableID)) {
+                IRCMessage m = new IRCMessage();
+                m.command = "PRIVMSG";
+                m.numParams = 2;
+                m.params[0] = currentServer;
+                m.params[1] = "SENDLIST" + getTableIDString(sendlistTableID, true)
+                        + " " + getLastEntryTime(sendlistTableID);
+
+                IRCMessageQueue q = getSendQ();
+                if (q != null) {
+                    q.putMessage(m);
+                }
+
+                state = 5; // wait for answers
+            } else {
+                state = 3; // don't send SENDLIST for this table, go to next table
+            }
+        }
+    }
+
+    private int getState3SendlistTableID(int sendlistTableID) {
+        if (getSendQ() == null) {
+            state = 10; // disconnect DB
+            reconnectReason = "getSendQ in state 3";
+        } else {
+            sendlistTableID--;
+            if (sendlistTableID < 0) {
+                state = 6; // end of sendlist
+            } else {
+                LOGGER.debug("IRCDDBApp: state=3 tableID=" + sendlistTableID);
+                state = 4; // send "SENDLIST"
+                timer = 900; // 15 minutes max for update
+            }
+        }
+        return sendlistTableID;
+    }
+
+    private int getState2SendlistTableID(int sendlistTableID) {
+        LOGGER.debug("IRCDDBApp: state=2 choose new 's-'-user");
+        if (getSendQ() == null) {
+            state = 10;
+            reconnectReason = "getSendQ in state 2";
+        } else {
+            if (findServerUser()) {
+                sendlistTableID = numberOfTablesToSync;
+
+                IRCMessage m2 = new IRCMessage();
+                m2.command = "PRIVMSG";
+                m2.numParams = 2;
+                m2.params[0] = currentServer;
+                m2.params[1] = "IRCDDB " + parseDateFormat.format(Date.from(startupTime)) + " " +
+                        reconnectReason;
+
+                IRCMessageQueue q = getSendQ();
+                if (q != null) {
+                    q.putMessage(m2);
+                }
+
+                if (rptrLocation != null) {
+                    m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = currentServer;
+                    m2.params[1] = "IRCDDB QTH: " + rptrLocation;
+                    q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+
+                if ((rptrFrequencies != null) && (numRptrFreq > 0)) {
+                    int i;
+
+                    for (i = 0; i < numRptrFreq; i++) {
+                        if (rptrFrequencies[i] != null) {
+                            m2 = new IRCMessage();
+                            m2.command = "PRIVMSG";
+                            m2.numParams = 2;
+                            m2.params[0] = currentServer;
+                            m2.params[1] = "IRCDDB QRG: " + rptrFrequencies[i];
+                            q = getSendQ();
+                            if (q != null) {
+                                q.putMessage(m2);
+                            }
+                        }
+                    }
+                }
+
+                if ((rptrInfoURL != null) && (!rptrInfoURL.isEmpty())) {
+                    m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = currentServer;
+                    m2.params[1] = "IRCDDB URL: " + rptrInfoURL;
+                    q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+
+
+                if (extApp != null) {
+                    state = 3; // next: send "SENDLIST"
+                } else {
+                    state = 6; // next: enablePublicUpdates
+                }
+            } else if (timer == 0) {
+                state = 10;
+                reconnectReason = "timeout in state 2";
+
+                IRCMessage m = new IRCMessage();
+                m.command = "QUIT";
+                m.numParams = 1;
+                m.params[0] = "no op user with 's-' found.";
+
+                IRCMessageQueue q = getSendQ();
+                if (q != null) {
+                    q.putMessage(m);
+                }
+            }
+        }
+        return sendlistTableID;
     }
 
 

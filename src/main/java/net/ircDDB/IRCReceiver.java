@@ -34,8 +34,8 @@ import java.io.IOException;
 public class IRCReceiver implements Runnable {
     private static final Logger LOGGER = LogManager.getLogger(IRCReceiver.class);
 
-    InputStream is;
-    IRCMessageQueue q;
+    private final InputStream is;
+    private final IRCMessageQueue q;
 
     IRCReceiver(InputStream inputStream, IRCMessageQueue messageQueue) {
         is = inputStream;
@@ -135,8 +135,6 @@ public class IRCReceiver implements Runnable {
                         case 4:
                             m.params[m.numParams - 1] = m.params[m.numParams - 1] + (char) b;
                             break;
-
-
                     }
 
                 }

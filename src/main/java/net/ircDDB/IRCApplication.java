@@ -26,19 +26,18 @@ package net.ircDDB;
 
 public interface IRCApplication
 {
-
-	void userJoin (String nick, String name, String host);
-	void userLeave (String nick);
-	void userChanOp (String nick, boolean op);
+	void userJoin(String nick, String name, String host);
+	void userLeave(String nick);
+	void userChanOp(String nick, boolean op);
 	void userListReset();
 	
-	void msgChannel (IRCMessage m);
-	void msgQuery (IRCMessage m);
+	void msgChannel(IRCMessage m);
+	void msgQuery(IRCMessage m);
 
 	void setCurrentNick(String nick);
 	void setTopic(String topic);
 	
-	void setSendQ( IRCMessageQueue s );
-	IRCMessageQueue getSendQ ();
+	void setSendQ(IRCMessageQueue s);
+	IRCMessageQueue getSendQ();
 	
 }
