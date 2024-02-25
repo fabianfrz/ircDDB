@@ -20,34 +20,13 @@ public class Main {
         Security.setProperty("networkaddress.cache.ttl", "10");
         // we need DNS round robin, cache addresses only for 10 seconds
 
-        String version = "";
-        Package pkg;
-
-        pkg = IRCDDBApp.class.getClassLoader().getDefinedPackage("net.ircDDB");
-
-
-        if (pkg != null) {
-
-            String v = pkg.getImplementationVersion();
-
-            if (v != null) {
-                version = "ircDDB:" + v;
-            }
-        }
-
-
+        StringBuilder version = new StringBuilder();
+        appendIRCDDBPackageVersion(version);
         Properties properties = new Properties();
-
-        try (var is = Files.newInputStream(Paths.get("ircDDB.properties"))) {
-            properties.load(is);
-        } catch (IOException e) {
-            LOGGER.error("could not open file 'ircDDB.properties'", e);
-            System.exit(1);
-        }
+        readPropertiesFile(properties);
 
         String irc_nick = properties.getProperty("irc_nick", "guest").trim().toLowerCase();
         String rptr_call = properties.getProperty("rptr_call", "nocall").trim().toLowerCase();
-
         boolean debug = properties.getProperty("debug", "0").equals("1");
 
         String irc_name;
@@ -71,91 +50,20 @@ public class Main {
 
 
         int numTables = Integer.parseInt(properties.getProperty("ddb_num_tables", "2"));
-
-        if ((numTables < 1) || (numTables > 10)) {
-            LOGGER.error("invalid ddb_num_tables: " + numTables + " must be:  1 <= x <= 10");
-            System.exit(1);
-        }
+        verifyNumTables(numTables);
 
         Pattern[] keyPattern = new Pattern[numTables];
         Pattern[] valuePattern = new Pattern[numTables];
-
-        try {
-            int i;
-
-            for (i = 0; i < numTables; i++) {
-                Pattern k = Pattern.compile(properties.getProperty("ddb_key_pattern" + i, "[A-Z0-9_]{8}"));
-                Pattern v = Pattern.compile(properties.getProperty("ddb_value_pattern" + i, "[A-Z0-9_]{8}"));
-
-                keyPattern[i] = k;
-                valuePattern[i] = v;
-            }
-
-        } catch (PatternSyntaxException e) {
-            LOGGER.error("pattern syntax error ", e);
-            System.exit(1);
-        }
-
+        createPatterns(numTables, properties, keyPattern, valuePattern);
 
         String extAppName = properties.getProperty("ext_app", "none");
+
         IRCDDBExtApp extApp = null;
-
         if (!extAppName.equals("none")) {
-            try {
-                Class<?> extAppClass = Class.forName(extAppName);
-
-                extApp = (IRCDDBExtApp) extAppClass.getDeclaredConstructor().newInstance();
-
-                if (!extApp.setParams(properties, numTables, keyPattern, valuePattern)) {
-                    LOGGER.error("ext_app setParams failed - exit.");
-                    System.exit(1);
-                }
-
-                Thread extappthr = new Thread(extApp);
-
-                extappthr.start();
-
-                pkg = extApp.getClass().getPackage();
-
-                if (pkg != null) {
-
-                    String v = pkg.getImplementationVersion();
-
-                    if (v != null) {
-                        String classname = extApp.getClass().getName();
-                        int pos = classname.lastIndexOf('.');
-
-                        if (pos < 0) {
-                            pos = 0;
-                        } else {
-                            pos++;
-                        }
-
-                        if (!version.isEmpty()) {
-                            version = version + " ";
-                        }
-
-                        version = version + classname.substring(pos) +
-                                ":" + v;
-                    }
-                }
-
-
-            } catch (Exception e) {
-                LOGGER.error("external application: ", e);
-                System.exit(1);
-            }
+            extApp = startExternalApp(extAppName, properties, numTables, keyPattern, valuePattern, version);
         }
 
-        String package_version = System.getenv("PACKAGE_VERSION");
-
-        if (package_version != null) {
-            if (!version.isEmpty()) {
-                version = version + " ";
-            }
-
-            version = version + package_version;
-        }
+        appendPackageVersion(version);
 
 
         String irc_channel = properties.getProperty("irc_channel", "#chat");
@@ -192,12 +100,103 @@ public class Main {
                 n,
                 properties.getProperty("irc_password", "secret"),
                 debug,
-                version);
-
+                version.toString());
 
         Thread ircthr = new Thread(irc);
-
         ircthr.start();
 
+    }
+
+    private static void readPropertiesFile(Properties properties) {
+        try (var is = Files.newInputStream(Paths.get("ircDDB.properties"))) {
+            properties.load(is);
+        } catch (IOException e) {
+            LOGGER.error("could not open file 'ircDDB.properties'", e);
+            System.exit(1);
+        }
+    }
+
+    private static void appendIRCDDBPackageVersion(StringBuilder version) {
+        Package pkg = IRCDDBApp.class.getPackage();
+        if (pkg != null) {
+
+            String v = pkg.getImplementationVersion();
+
+            if (v != null) {
+                version.append("ircDDB:").append(v);
+            }
+        }
+    }
+
+    private static void verifyNumTables(int numTables) {
+        if ((numTables < 1) || (numTables > 10)) {
+            LOGGER.error("invalid ddb_num_tables: " + numTables + " must be:  1 <= x <= 10");
+            System.exit(1);
+        }
+    }
+
+    private static void appendPackageVersion(StringBuilder version) {
+        String package_version = System.getenv("PACKAGE_VERSION");
+
+        if (package_version != null) {
+            if (!version.isEmpty()) {
+                version.append(" ");
+            }
+
+            version.append(package_version);
+        }
+    }
+
+    private static void createPatterns(int numTables, Properties properties, Pattern[] keyPattern, Pattern[] valuePattern) {
+        try {
+            for (int i = 0; i < numTables; i++) {
+                Pattern k = Pattern.compile(properties.getProperty("ddb_key_pattern" + i, "[A-Z0-9_]{8}"));
+                Pattern v = Pattern.compile(properties.getProperty("ddb_value_pattern" + i, "[A-Z0-9_]{8}"));
+
+                keyPattern[i] = k;
+                valuePattern[i] = v;
+            }
+
+        } catch (PatternSyntaxException e) {
+            LOGGER.error("pattern syntax error ", e);
+            System.exit(1);
+        }
+    }
+
+    private static IRCDDBExtApp startExternalApp(String extAppName, Properties properties, int numTables,
+                                                 Pattern[] keyPattern, Pattern[] valuePattern,
+                                                 StringBuilder version) {
+        try {
+            Class<?> extAppClass = Class.forName(extAppName);
+
+            var extApp = (IRCDDBExtApp) extAppClass.getDeclaredConstructor().newInstance();
+
+            if (!extApp.setParams(properties, numTables, keyPattern, valuePattern)) {
+                LOGGER.error("ext_app setParams failed - exit.");
+                System.exit(1);
+            }
+
+            Thread extappthr = new Thread(extApp);
+
+            extappthr.start();
+
+            var pkg = extApp.getClass().getPackage();
+
+            if (pkg != null) {
+
+                String v = pkg.getImplementationVersion();
+
+                if (v != null) {
+                    if (!version.isEmpty()) {
+                        version.append(" ").append(extAppClass.getSimpleName()).append(":").append(v);
+                    }
+                }
+            }
+            return extApp;
+        } catch (Exception e) {
+            LOGGER.error("external application: ", e);
+            System.exit(1);
+            throw new IllegalStateException("unreachable - we system.exit before.", e);
+        }
     }
 }
