@@ -89,7 +89,6 @@ public class IRCDDBApp implements IRCApplication, Runnable {
     private int numRptrFreq;
     private String rptrInfoURL;
 
-
     IRCDDBApp(int numTables, Pattern[] k, Pattern[] v, String u_chan, String dbg_chan,
               IRCDDBExtApp ea, String dumpFileName) {
         extApp = ea;
@@ -176,7 +175,6 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 String[] modules = {"A", "B", "C", "D", "AD", "BD", "CD", "DD"};
 
                 numRptrFreq = modules.length;
-
                 rptrFrequencies = new String[numRptrFreq];
 
                 int i;
@@ -203,16 +201,12 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                         rptrFrequencies[i] = null;
                     }
                 }
-
             }
-
         } catch (NumberFormatException e) {
             rptrFrequencies = null;
             numRptrFreq = 0;
             LOGGER.error("NumberFormatException in rptr QTH/QRG");
         }
-
-
     }
 
     public void userJoin(String nick, String name, String host) {
@@ -513,179 +507,13 @@ public class IRCDDBApp implements IRCApplication, Runnable {
 
         switch (command) {
             case "UPDATE" -> {
-                UserObject other = user.get(m.getPrefixNick()); // nick of other user
-
-
-                if (s.hasNext(datePattern) &&
-                        (other != null)) {
-                    IRCDDBExtApp.UpdateResult result = processUpdate(tableID, s, other.getNick(), msg);
-
-                    if (result != null) {
-                        boolean sendUpdate = shouldUpdateBeSent(result);
-
-                        UserObject me = user.get(myNick);
-
-                        if ((me != null) && me.isOp() && sendUpdate)  // send only if i am operator
-                        {
-
-                            IRCMessage m2 = new IRCMessage();
-                            m2.command = "PRIVMSG";
-                            m2.numParams = 2;
-                            m2.params[0] = updateChannel;
-                            m2.params[1] = getTableIDString(tableID, false) +
-                                    parseDateFormat.format(Date.from(result.getNewObj().getModTime())) + " " +
-                                    result.getNewObj().getKey() + " " + result.getNewObj().getValue() + "  (from: " + m.getPrefixNick() + ")";
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m2);
-                            }
-                        }
-
-                        String privCommand = null;
-                        boolean isSTNCall = false;
-
-                        if (tableID == 0) {
-                            isSTNCall = result.getNewObj().getKey().startsWith("STN");
-                            privCommand = checkPrivCommand(msg);
-                        }
-
-                        if (privCommand != null) {
-                            String setPriv = null;
-
-                            if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON")) && (!result.isHideFromLog())) {
-                                setPriv = "P_______";
-                            }
-
-                            if (privCommand.equals("PRIV_OFF") && (result.isHideFromLog())) {
-                                setPriv = "X_______";
-                            }
-
-                            if ((privCommand.equals("VIS_OFF_") || privCommand.equals("VIS__OFF"))
-                                    && (!result.isHideFromLog())) {
-                                setPriv = "P_______";
-                            }
-
-                            if ((privCommand.equals("VIS_ON__") || privCommand.equals("VIS__ON_") || privCommand.equals("VIS___ON"))
-                                    && (result.isHideFromLog())) {
-                                setPriv = "X_______";
-                            }
-
-                            if ((setPriv != null) && (me != null) && me.isOp()
-                                    && (numberOfTables >= 3))  // send only if i am operator and ddb_num_tables >= 3
-                            {
-                                IRCMessage m2 = new IRCMessage();
-                                m2.command = "PRIVMSG";
-                                m2.numParams = 2;
-                                m2.params[0] = updateChannel;
-                                m2.params[1] = getTableIDString(2, false) +
-                                        parseDateFormat.format(result.getNewObj().getModTime()) + " " +
-                                        result.getNewObj().getKey() + " " + setPriv + "  (from: " + m.getPrefixNick() + ")";
-
-                                IRCMessageQueue q = getSendQ();
-                                if (q != null) {
-                                    q.putMessage(m2);
-                                }
-
-                                if (extApp != null) {
-                                    extApp.dbUpdate(2, result.getNewObj().getModTime(), result.getNewObj().getKey(), setPriv, myNick, null);
-                                }
-
-                            }
-                        }
-
-                        if ((debugChannel != null) && (result.getModifiedLogLine() != null)
-                                && (privCommand == null) && (!isSTNCall)) {
-                            IRCMessage m2 = new IRCMessage();
-                            m2.command = "PRIVMSG";
-                            m2.numParams = 2;
-                            m2.params[0] = debugChannel;
-                            m2.params[1] = m.getPrefixNick() + ": UPDATE OK: " + result.getModifiedLogLine();
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m2);
-                            }
-                        }
-                    } else {
-                        if (debugChannel != null) {
-                            IRCMessage m2 = new IRCMessage();
-                            m2.command = "PRIVMSG";
-                            m2.numParams = 2;
-                            m2.params[0] = debugChannel;
-                            m2.params[1] = m.getPrefixNick() + ": UPDATE ERROR: " + msg;
-
-                            IRCMessageQueue q = getSendQ();
-                            if (q != null) {
-                                q.putMessage(m2);
-                            }
-                        }
-
-                    }
-                }
+                handleUpdate(m, s, tableID, msg);
 
 
             }
             case "SENDLIST" -> {
 
-                String answer = "LIST_END";
-
-                if (s.hasNext(datePattern)) {
-                    String d = s.next(datePattern);
-
-                    if (s.hasNext(timePattern)) {
-                        String t = s.next(timePattern);
-
-
-                        Instant dbDate;
-
-                        try {
-                            dbDate = parseDateFormat.parse(d + " " + t).toInstant();
-                        } catch (ParseException e) {
-                            dbDate = null;
-                        }
-
-                        if ((dbDate != null) && (extApp != null)) {
-                            final int NUM_ENTRIES = 30;
-
-                            var l = extApp.getDatabaseObjects(tableID, dbDate, NUM_ENTRIES);
-
-                            int count = 0;
-
-                            if (l != null) {
-                                for (IRCDDBExtApp.DatabaseObject o : l) {
-                                    IRCMessage m3 = new IRCMessage(
-                                            m.getPrefixNick(),
-                                            "UPDATE" + getTableIDString(tableID, true) +
-                                                    " " + parseDateFormat.format(o.getModTime()) + " "
-                                                    + o.getKey() + " " + o.getValue());
-
-                                    IRCMessageQueue q = getSendQ();
-                                    if (q != null) {
-                                        q.putMessage(m3);
-                                    }
-
-                                    count++;
-                                }
-                            }
-
-                            if (count > NUM_ENTRIES) {
-                                answer = "LIST_MORE";
-                            }
-                        }
-                    }
-                }
-
-                IRCMessage m2 = new IRCMessage();
-                m2.command = "PRIVMSG";
-                m2.numParams = 2;
-                m2.params[0] = m.getPrefixNick();
-                m2.params[1] = answer;
-
-                IRCMessageQueue q = getSendQ();
-                if (q != null) {
-                    q.putMessage(m2);
-                }
+                handleSendList(m, s, tableID);
             }
             case "LIST_END" -> {
                 if (state == 5) // if in sendlist processing state
@@ -700,78 +528,13 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 }
             }
             case "OP_BEG" -> {
-                UserObject me = user.get(myNick);
-                UserObject other = user.get(m.getPrefixNick()); // nick of other user
-
-
-                if ((me != null) && (other != null) && me.isOp() && !other.isOp()
-                        && other.getNick().startsWith("s-") && me.getNick().startsWith("s-")) {
-                    IRCMessage m2 = new IRCMessage();
-                    m2.command = "MODE";
-                    m2.numParams = 3;
-                    m2.params[0] = updateChannel;
-                    m2.params[1] = "+o";
-                    m2.params[2] = other.getNick();
-
-                    IRCMessageQueue q = getSendQ();
-                    if (q != null) {
-                        q.putMessage(m2);
-                    }
-                }
+                handleOpBeg(m);
             }
             case "QUIT_NOW" -> {
-                UserObject other = user.get(m.getPrefixNick()); // nick of other user
-
-
-                if ((other != null) && other.isOp()
-                        && other.getNick().startsWith("u-")) {
-
-                    IRCMessage m2 = new IRCMessage();
-                    m2.command = "QUIT";
-                    m2.numParams = 1;
-                    m2.params[0] = "QUIT_NOW sent by " + other.getNick();
-
-                    IRCMessageQueue q = getSendQ();
-                    if (q != null) {
-                        q.putMessage(m2);
-                    }
-
-                    timer = 3;
-                    state = 11;  // exit
-                    reconnectReason = "QUIT_NOW received";
-                }
+                handleQuitNow(m);
             }
             case "SHOW_PROPERTIES" -> {
-                UserObject other = user.get(m.getPrefixNick()); // nick of other user
-
-
-                if ((other != null) && other.isOp()
-                        && other.getNick().startsWith("u-")) {
-                    int num = properties.size();
-
-                    for (Enumeration<Object> e = properties.keys(); e.hasMoreElements(); ) {
-                        String k = (String) e.nextElement();
-                        String v = properties.getProperty(k);
-
-                        if (k.equals("irc_password")) {
-                            v = "*****";
-                        } else {
-                            v = "(" + v + ")";
-                        }
-
-                        IRCMessage m2 = new IRCMessage();
-                        m2.command = "PRIVMSG";
-                        m2.numParams = 2;
-                        m2.params[0] = m.getPrefixNick();
-                        m2.params[1] = num + ": (" + k + ") " + v;
-
-                        IRCMessageQueue q = getSendQ();
-                        if (q != null) {
-                            q.putMessage(m2);
-                        }
-                        num--;
-                    }
-                }
+                handleShowProperties(m);
             }
             case "IRCDDB" -> {
                 if (debugChannel != null) {
@@ -792,6 +555,257 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                     extApp.msgQuery(m);
                 }
             }
+        }
+    }
+
+    private void handleOpBeg(IRCMessage m) {
+        UserObject me = user.get(myNick);
+        UserObject other = user.get(m.getPrefixNick()); // nick of other user
+
+
+        if ((me != null) && (other != null) && me.isOp() && !other.isOp()
+                && other.getNick().startsWith("s-") && me.getNick().startsWith("s-")) {
+            IRCMessage m2 = new IRCMessage();
+            m2.command = "MODE";
+            m2.numParams = 3;
+            m2.params[0] = updateChannel;
+            m2.params[1] = "+o";
+            m2.params[2] = other.getNick();
+
+            IRCMessageQueue q = getSendQ();
+            if (q != null) {
+                q.putMessage(m2);
+            }
+        }
+    }
+
+    private void handleShowProperties(IRCMessage m) {
+        UserObject other = user.get(m.getPrefixNick()); // nick of other user
+
+
+        if ((other != null) && other.isOp()
+                && other.getNick().startsWith("u-")) {
+            int num = properties.size();
+
+            for (Enumeration<Object> e = properties.keys(); e.hasMoreElements(); ) {
+                String k = (String) e.nextElement();
+                String v = properties.getProperty(k);
+
+                if (k.equals("irc_password")) {
+                    v = "*****";
+                } else {
+                    v = "(" + v + ")";
+                }
+
+                IRCMessage m2 = new IRCMessage();
+                m2.command = "PRIVMSG";
+                m2.numParams = 2;
+                m2.params[0] = m.getPrefixNick();
+                m2.params[1] = num + ": (" + k + ") " + v;
+
+                IRCMessageQueue q = getSendQ();
+                if (q != null) {
+                    q.putMessage(m2);
+                }
+                num--;
+            }
+        }
+    }
+
+    private void handleQuitNow(IRCMessage m) {
+        UserObject other = user.get(m.getPrefixNick()); // nick of other user
+
+
+        if ((other != null) && other.isOp()
+                && other.getNick().startsWith("u-")) {
+
+            IRCMessage m2 = new IRCMessage();
+            m2.command = "QUIT";
+            m2.numParams = 1;
+            m2.params[0] = "QUIT_NOW sent by " + other.getNick();
+
+            IRCMessageQueue q = getSendQ();
+            if (q != null) {
+                q.putMessage(m2);
+            }
+
+            timer = 3;
+            state = 11;  // exit
+            reconnectReason = "QUIT_NOW received";
+        }
+    }
+
+    private void handleUpdate(IRCMessage m, Scanner s, int tableID, String msg) {
+        UserObject other = user.get(m.getPrefixNick()); // nick of other user
+
+
+        if (s.hasNext(datePattern) &&
+                (other != null)) {
+            IRCDDBExtApp.UpdateResult result = processUpdate(tableID, s, other.getNick(), msg);
+
+            if (result != null) {
+                boolean sendUpdate = shouldUpdateBeSent(result);
+
+                UserObject me = user.get(myNick);
+
+                if ((me != null) && me.isOp() && sendUpdate)  // send only if i am operator
+                {
+
+                    IRCMessage m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = updateChannel;
+                    m2.params[1] = getTableIDString(tableID, false) +
+                            parseDateFormat.format(Date.from(result.getNewObj().getModTime())) + " " +
+                            result.getNewObj().getKey() + " " + result.getNewObj().getValue() + "  (from: " + m.getPrefixNick() + ")";
+
+                    IRCMessageQueue q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+
+                String privCommand = null;
+                boolean isSTNCall = false;
+
+                if (tableID == 0) {
+                    isSTNCall = result.getNewObj().getKey().startsWith("STN");
+                    privCommand = checkPrivCommand(msg);
+                }
+
+                if (privCommand != null) {
+                    String setPriv = null;
+
+                    if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON")) && (!result.isHideFromLog())) {
+                        setPriv = "P_______";
+                    }
+
+                    if (privCommand.equals("PRIV_OFF") && (result.isHideFromLog())) {
+                        setPriv = "X_______";
+                    }
+
+                    if ((privCommand.equals("VIS_OFF_") || privCommand.equals("VIS__OFF"))
+                            && (!result.isHideFromLog())) {
+                        setPriv = "P_______";
+                    }
+
+                    if ((privCommand.equals("VIS_ON__") || privCommand.equals("VIS__ON_") || privCommand.equals("VIS___ON"))
+                            && (result.isHideFromLog())) {
+                        setPriv = "X_______";
+                    }
+
+                    if ((setPriv != null) && (me != null) && me.isOp()
+                            && (numberOfTables >= 3))  // send only if i am operator and ddb_num_tables >= 3
+                    {
+                        IRCMessage m2 = new IRCMessage();
+                        m2.command = "PRIVMSG";
+                        m2.numParams = 2;
+                        m2.params[0] = updateChannel;
+                        m2.params[1] = getTableIDString(2, false) +
+                                parseDateFormat.format(result.getNewObj().getModTime()) + " " +
+                                result.getNewObj().getKey() + " " + setPriv + "  (from: " + m.getPrefixNick() + ")";
+
+                        IRCMessageQueue q = getSendQ();
+                        if (q != null) {
+                            q.putMessage(m2);
+                        }
+
+                        if (extApp != null) {
+                            extApp.dbUpdate(2, result.getNewObj().getModTime(), result.getNewObj().getKey(), setPriv, myNick, null);
+                        }
+
+                    }
+                }
+
+                if ((debugChannel != null) && (result.getModifiedLogLine() != null)
+                        && (privCommand == null) && (!isSTNCall)) {
+                    IRCMessage m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = debugChannel;
+                    m2.params[1] = m.getPrefixNick() + ": UPDATE OK: " + result.getModifiedLogLine();
+
+                    IRCMessageQueue q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+            } else {
+                if (debugChannel != null) {
+                    IRCMessage m2 = new IRCMessage();
+                    m2.command = "PRIVMSG";
+                    m2.numParams = 2;
+                    m2.params[0] = debugChannel;
+                    m2.params[1] = m.getPrefixNick() + ": UPDATE ERROR: " + msg;
+
+                    IRCMessageQueue q = getSendQ();
+                    if (q != null) {
+                        q.putMessage(m2);
+                    }
+                }
+
+            }
+        }
+    }
+
+    private void handleSendList(IRCMessage m, Scanner s, int tableID) {
+        String answer = "LIST_END";
+
+        if (s.hasNext(datePattern)) {
+            String d = s.next(datePattern);
+
+            if (s.hasNext(timePattern)) {
+                String t = s.next(timePattern);
+
+
+                Instant dbDate;
+
+                try {
+                    dbDate = parseDateFormat.parse(d + " " + t).toInstant();
+                } catch (ParseException e) {
+                    dbDate = null;
+                }
+
+                if ((dbDate != null) && (extApp != null)) {
+                    final int NUM_ENTRIES = 30;
+
+                    var l = extApp.getDatabaseObjects(tableID, dbDate, NUM_ENTRIES);
+
+                    int count = 0;
+
+                    if (l != null) {
+                        for (IRCDDBExtApp.DatabaseObject o : l) {
+                            IRCMessage m3 = new IRCMessage(
+                                    m.getPrefixNick(),
+                                    "UPDATE" + getTableIDString(tableID, true) +
+                                            " " + parseDateFormat.format(o.getModTime()) + " "
+                                            + o.getKey() + " " + o.getValue());
+
+                            IRCMessageQueue q = getSendQ();
+                            if (q != null) {
+                                q.putMessage(m3);
+                            }
+
+                            count++;
+                        }
+                    }
+
+                    if (count > NUM_ENTRIES) {
+                        answer = "LIST_MORE";
+                    }
+                }
+            }
+        }
+
+        IRCMessage m2 = new IRCMessage();
+        m2.command = "PRIVMSG";
+        m2.numParams = 2;
+        m2.params[0] = m.getPrefixNick();
+        m2.params[1] = answer;
+
+        IRCMessageQueue q = getSendQ();
+        if (q != null) {
+            q.putMessage(m2);
         }
     }
 
@@ -858,9 +872,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
             if (timer > 0) {
                 timer--;
             }
-
             channelTimeout++;
-
 
             switch (state) {
                 case 0:  // wait for network to start
