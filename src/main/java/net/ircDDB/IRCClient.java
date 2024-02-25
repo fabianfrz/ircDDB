@@ -25,15 +25,12 @@ package net.ircDDB;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.*;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
-import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Random;
 
 
@@ -78,71 +75,40 @@ public class IRCClient implements Runnable {
     boolean init() {
 
         InetAddress[] adr;
-
         try {
             adr = InetAddress.getAllByName(host);
         } catch (UnknownHostException e) {
             LOGGER.error("IRCClient/unknown host", e);
             return false;
         }
-
         if (adr != null) {
             int num = adr.length;
 
-            if ((num > 0) && (num < 15)) {
-
-                int i;
-
+            if (num > 0 && num < 15) {
                 LOGGER.info("IRCClient/found " + num + " addresses:");
+                Arrays.stream(adr).forEach((a) -> LOGGER.info("  " + a.getHostAddress()));
 
-                int[] shuffle = new int[num];
-
-                for (i = 0; i < num; i++) {
-                    LOGGER.info("  " + adr[i].getHostAddress());
-                    shuffle[i] = i;
-                }
-
-                Random r = new Random();
-
-                for (i = 0; i < (num - 1); i++) {
-                    if (r.nextBoolean()) {
-                        int tmp;
-                        tmp = shuffle[i];
-                        shuffle[i] = shuffle[i + 1];
-                        shuffle[i + 1] = tmp;
-                    }
-                }
-
-                for (i = (num - 1); i > 0; i--) {
-                    if (r.nextBoolean()) {
-                        int tmp;
-                        tmp = shuffle[i];
-                        shuffle[i] = shuffle[i - 1];
-                        shuffle[i - 1] = tmp;
-                    }
-                }
+                int[] shuffle = getShuffledAddresses(num);
 
                 socket = null;
-
-                for (i = 0; i < num; i++) {
+                for (int i = 0; i < num; i++) {
                     InetAddress a = adr[shuffle[i]];
 
-                    if (a instanceof Inet4Address) {
-                        LOGGER.info("IRCClient/trying: " + a.getHostAddress());
+                    LOGGER.info("IRCClient/trying: " + a.getHostAddress());
+                    if (a instanceof Inet4Address || a instanceof Inet6Address) {
 
                         try {
                             socket = new Socket();
                             InetSocketAddress endp = new InetSocketAddress(a, port);
-
                             socket.connect(endp, 5000);  // 5 seconds timeout
                         } catch (IOException e) {
                             LOGGER.warn("IRCClient/ioexception: ", e);
                             socket = null;
                         }
 
-                        if (socket != null) {
-                            break;
-                        }
+                    }
+                    if (socket != null) {
+                        break;
                     }
                 }
 
@@ -169,7 +135,6 @@ public class IRCClient implements Runnable {
         }
 
         InputStream is;
-
         try {
             is = socket.getInputStream();
         } catch (IOException e) {
@@ -180,7 +145,6 @@ public class IRCClient implements Runnable {
         recv = new IRCReceiver(is, recvQ);
 
         recvThread = new Thread(recv);
-
         try {
             recvThread.start();
         } catch (IllegalThreadStateException e) {
@@ -192,6 +156,33 @@ public class IRCClient implements Runnable {
         proto.setNetworkReady(true);
 
         return true;
+    }
+
+    private int[] getShuffledAddresses(int num) {
+        int[] shuffle = new int[num];
+        for (int i = 0; i < num; i++) {
+            shuffle[i] = i;
+        }
+
+        Random r = new Random();
+        for (int i = 0; i < (num - 1); i++) {
+            if (r.nextBoolean()) {
+                int tmp;
+                tmp = shuffle[i];
+                shuffle[i] = shuffle[i + 1];
+                shuffle[i + 1] = tmp;
+            }
+        }
+
+        for (int i = (num - 1); i > 0; i--) {
+            if (r.nextBoolean()) {
+                int tmp;
+                tmp = shuffle[i];
+                shuffle[i] = shuffle[i - 1];
+                shuffle[i - 1] = tmp;
+            }
+        }
+        return shuffle;
     }
 
 
