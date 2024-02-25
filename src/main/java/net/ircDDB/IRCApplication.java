@@ -24,6 +24,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB;
 
 
+import net.ircDDB.irc.IRCMessage;
+import net.ircDDB.irc.IRCMessageQueue;
+
 public interface IRCApplication
 {
 	void userJoin(String nick, String name, String host);

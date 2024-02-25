@@ -3,6 +3,7 @@
 ircDDB
 
 Copyright (C) 2010   Michael Dirska, DL1BFF (dl1bff@mdx.de)
+Copyright (C) 2024   Fabian Franz BSc., OE9LTX
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,9 +20,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-package net.ircDDB;
+package net.ircDDB.irc;
 
 
+import net.ircDDB.IRCApplication;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

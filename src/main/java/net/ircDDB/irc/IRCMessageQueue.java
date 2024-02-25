@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 
-package net.ircDDB;
+package net.ircDDB.irc;
 
 
 

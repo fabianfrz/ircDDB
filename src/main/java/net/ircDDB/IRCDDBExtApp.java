@@ -3,6 +3,7 @@
 ircDDB
 
 Copyright (C) 2011   Michael Dirska, DL1BFF (dl1bff@mdx.de)
+Copyright (C) 2024   Fabian Franz BSc., OE9LTX
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
