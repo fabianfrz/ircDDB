@@ -32,7 +32,7 @@ import java.util.Random;
  * This class is a custom IRC implementation.
  * I guess it make sense to use a IRC lib instead.
  */
-class IRCProtocol {
+public class IRCProtocol {
     private static final Logger LOGGER = LogManager.getLogger(IRCProtocol.class);
 
     private final String name;
@@ -49,12 +49,9 @@ class IRCProtocol {
     private final Random r;
 
     private final IRCApplication app;
-
-    private final boolean debug;
     private final String version;
 
-    IRCProtocol(IRCApplication a, String ch, String dbg_chan, String n, String[] u, String pass,
-                boolean dbg, String v) {
+    IRCProtocol(IRCApplication a, String ch, String dbg_chan, String n, String[] u, String pass, String v) {
 
         app = a;
 
@@ -67,7 +64,6 @@ class IRCProtocol {
         state = 0;
         timer = 0;
         pingTimer = 60; // 30 seconds
-        debug = dbg;
 
         r = new Random();
         chooseNewNick();
@@ -78,8 +74,6 @@ class IRCProtocol {
 
     void chooseNewNick() {
         int k = r.nextInt(nicks.length);
-
-        // System.out.println("nick: " + k);
 
         currentNick = nicks[k];
 
@@ -111,14 +105,13 @@ class IRCProtocol {
         while (recvQ.messageAvailable()) {
             IRCMessage m = recvQ.getMessage();
 
-            if (debug) {
-                System.out.print("R [" + m.prefix + "]");
-                System.out.print(" [" + m.command + "]");
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("R [" + m.prefix + "]");
+                LOGGER.debug(" [" + m.command + "]");
 
                 for (int i = 0; i < m.numParams; i++) {
-                    System.out.print(" [" + m.params[i] + "]");
+                    LOGGER.debug(" [" + m.params[i] + "]");
                 }
-                System.out.println();
             }
 
             switch (m.command) {

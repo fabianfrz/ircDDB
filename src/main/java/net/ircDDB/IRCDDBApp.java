@@ -154,18 +154,20 @@ public class IRCDDBApp implements IRCApplication, Runnable {
             double longitude = Double.parseDouble(properties.getProperty("rptr_pos_longitude", "0"));
 
             if ((latitude != 0.0) || (longitude != 0.0)) {
-                String desc1 = properties.getProperty("rptr_pos_text1", "").trim().replaceAll("[^a-zA-Z0-9 +&(),./'-]", "");
-                String desc2 = properties.getProperty("rptr_pos_text2", "").trim().replaceAll("[^a-zA-Z0-9 +&(),./'-]", "");
+                StringBuilder desc1 = new StringBuilder(properties.getProperty("rptr_pos_text1", "")
+                    .trim().replaceAll("[^a-zA-Z0-9 +&(),./'-]", ""));
+                StringBuilder desc2 = new StringBuilder(properties.getProperty("rptr_pos_text2", "")
+                    .trim().replaceAll("[^a-zA-Z0-9 +&(),./'-]", ""));
                 String rangeUnit = properties.getProperty("rptr_range_unit", "mile").trim().toLowerCase();
                 String aglUnit = properties.getProperty("rptr_agl_unit", "meter").trim().toLowerCase();
 
 
                 while (desc1.length() < 20) {
-                    desc1 = desc1 + " ";
+                    desc1.append(" ");
                 }
 
                 while (desc2.length() < 20) {
-                    desc2 = desc2 + " ";
+                    desc2.append(" ");
                 }
 
                 rptrLocation = String.format("%1$+09.5f %2$+010.5f", latitude, longitude).replace(',', '.') +
@@ -177,8 +179,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 numRptrFreq = modules.length;
                 rptrFrequencies = new String[numRptrFreq];
 
-                int i;
-                for (i = 0; i < numRptrFreq; i++) {
+                for (int i = 0; i < numRptrFreq; i++) {
                     double freq = Double.parseDouble(properties.getProperty("rptr_freq_" + modules[i], "0"));
                     double shift = Double.parseDouble(properties.getProperty("rptr_duplex_shift_" + modules[i], "0"));
                     double range = Double.parseDouble(properties.getProperty("rptr_range_" + modules[i], "0"));
@@ -235,8 +236,6 @@ public class IRCDDBApp implements IRCApplication, Runnable {
     }
 
     public void userLeave(String nick) {
-        // System.out.println("APP: leave " + nick );
-
         if (extApp != null) {
             if (user.containsKey(nick)) {
                 extApp.userLeave(nick);
@@ -506,15 +505,8 @@ public class IRCDDBApp implements IRCApplication, Runnable {
         }
 
         switch (command) {
-            case "UPDATE" -> {
-                handleUpdate(m, s, tableID, msg);
-
-
-            }
-            case "SENDLIST" -> {
-
-                handleSendList(m, s, tableID);
-            }
+            case "UPDATE" -> handleUpdate(m, s, tableID, msg);
+            case "SENDLIST" -> handleSendList(m, s, tableID);
             case "LIST_END" -> {
                 if (state == 5) // if in sendlist processing state
                 {
@@ -527,15 +519,9 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                     state = 4;  // send next SENDLIST
                 }
             }
-            case "OP_BEG" -> {
-                handleOpBeg(m);
-            }
-            case "QUIT_NOW" -> {
-                handleQuitNow(m);
-            }
-            case "SHOW_PROPERTIES" -> {
-                handleShowProperties(m);
-            }
+            case "OP_BEG" -> handleOpBeg(m);
+            case "QUIT_NOW" -> handleQuitNow(m);
+            case "SHOW_PROPERTIES" -> handleShowProperties(m);
             case "IRCDDB" -> {
                 if (debugChannel != null) {
                     IRCMessage m2 = new IRCMessage();
@@ -674,25 +660,7 @@ public class IRCDDBApp implements IRCApplication, Runnable {
                 }
 
                 if (privCommand != null) {
-                    String setPriv = null;
-
-                    if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON")) && (!result.isHideFromLog())) {
-                        setPriv = "P_______";
-                    }
-
-                    if (privCommand.equals("PRIV_OFF") && (result.isHideFromLog())) {
-                        setPriv = "X_______";
-                    }
-
-                    if ((privCommand.equals("VIS_OFF_") || privCommand.equals("VIS__OFF"))
-                            && (!result.isHideFromLog())) {
-                        setPriv = "P_______";
-                    }
-
-                    if ((privCommand.equals("VIS_ON__") || privCommand.equals("VIS__ON_") || privCommand.equals("VIS___ON"))
-                            && (result.isHideFromLog())) {
-                        setPriv = "X_______";
-                    }
+                    String setPriv = getStringIRC(privCommand, result);
 
                     if ((setPriv != null) && (me != null) && me.isOp()
                             && (numberOfTables >= 3))  // send only if i am operator and ddb_num_tables >= 3
@@ -746,6 +714,29 @@ public class IRCDDBApp implements IRCApplication, Runnable {
 
             }
         }
+    }
+
+    private static String getStringIRC(String privCommand, IRCDDBExtApp.UpdateResult result) {
+        String setPriv = null;
+
+        if ((privCommand.equals("PRIV_ON_") || privCommand.equals("PRIV__ON")) && (!result.isHideFromLog())) {
+            setPriv = "P_______";
+        }
+
+        if (privCommand.equals("PRIV_OFF") && (result.isHideFromLog())) {
+            setPriv = "X_______";
+        }
+
+        if ((privCommand.equals("VIS_OFF_") || privCommand.equals("VIS__OFF"))
+                && (!result.isHideFromLog())) {
+            setPriv = "P_______";
+        }
+
+        if ((privCommand.equals("VIS_ON__") || privCommand.equals("VIS__ON_") || privCommand.equals("VIS___ON"))
+                && (result.isHideFromLog())) {
+            setPriv = "X_______";
+        }
+        return setPriv;
     }
 
     private void handleSendList(IRCMessage m, Scanner s, int tableID) {

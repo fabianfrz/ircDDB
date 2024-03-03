@@ -22,9 +22,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package net.ircDDB.irc;
 
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.OutputStream;
+import java.io.PrintWriter;
 
 public class IRCMessage
 {
+	private static final Logger LOGGER = LogManager.getLogger(IRCMessage.class);
 
 	public String prefix;
 	public String command;
@@ -121,23 +127,20 @@ public class IRCMessage
 		return prefixComponents[2].toString();
 	}
 
-	void writeMessage ( java.io.OutputStream os, boolean debug ) throws java.io.IOException
+	void writeMessage ( OutputStream os ) throws java.io.IOException
 	{
 
-		if (debug)
+		if (LOGGER.isDebugEnabled())
 		{
-			System.out.print("T [" + prefix + "]" );
-
-                        System.out.print(" [" + command +"]" );
-
-                        for (int i=0; i < numParams; i++)
-                        {
-                        	System.out.print(" [" + params[i] + "]" );
-                        }
-                        System.out.println();
+			LOGGER.debug("T [" + prefix + "]" );
+			LOGGER.debug(" [" + command +"]" );
+			for (int i=0; i < numParams; i++)
+			{
+				LOGGER.debug(" [" + params[i] + "]" );
+			}
 		}
 
-		java.io.PrintWriter p = new java.io.PrintWriter(os);
+        var p = new PrintWriter(os);
 
 		if (!prefix.isEmpty())
 		{

@@ -27,7 +27,6 @@ public class Main {
 
         String irc_nick = properties.getProperty("irc_nick", "guest").trim().toLowerCase();
         String rptr_call = properties.getProperty("rptr_call", "nocall").trim().toLowerCase();
-        boolean debug = properties.getProperty("debug", "0").equals("1");
 
         String irc_name;
 
@@ -99,7 +98,6 @@ public class Main {
                 irc_name,
                 n,
                 properties.getProperty("irc_password", "secret"),
-                debug,
                 version.toString());
 
         Thread ircthr = new Thread(irc);
